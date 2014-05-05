@@ -15,15 +15,18 @@ PURPLE = sdl2.ext.Color(255, 0, 255)
 
 maxX = 1024
 maxY = 800
-neighborDist = 150
-minDist = 40
+visionDistance = 150
+minNeighborDistance = 40
+minAntagonistDistance = 150
+minWallDistance = 40
 leaderWeight = 10
 fov = math.pi / 2
-sepForce = 1.0
-wallSepForce = 1.0
+sepForce = 2.0
+wallSepForce = 4
 alignForce = 0.5
 cohesiveForce = 0.5
-numInteractionPartners = 7 # neighbors to actually consider
+numInteractionPartners = 14 # neighbors to actually consider
+centerAttraction = 0.5
 
 class Agent:
     def __init__(self, posX, posY, speed, heading, color, width, height, spriteFactory, spriteRenderer, name = ''):
@@ -38,8 +41,9 @@ class Agent:
         self.height = height
         self.sprite = spriteFactory.from_color(self.color, size=(self.width, self.height))
         self.spriteRenderer = spriteRenderer
-        self.sprite.position = int(self.posX), int(self.posY)
+        self.sprite.position = int(self.posX - self.width/2), int(self.posY - self.height/2)
         self.name = name
+        self.invisible = False
 
     def turnLeft(self, mag):
         # Change heading and velocity direction accordingly
@@ -65,7 +69,19 @@ class Agent:
         self.sprite.position = int(self.posX), int(self.posY)
 
     def draw(self):
-        self.spriteRenderer.render(self.sprite)
+        if not self.invisible:
+            self.spriteRenderer.render(self.sprite)
+
+    def becomeInvisible(self):
+        print "becoming invisible!"
+        self.invisible = True
+
+    def isTouching(self, agent):
+        dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
+        if dist < self.width / 2 + agent.width / 2:
+            return True
+        else:
+            return False
 
     # Check if an agent is in this agent's FOV
     def canSee(self, agent):
@@ -88,22 +104,25 @@ class Agent:
 
 
     def getNeighbors(self, agentList):
-        # Return a list of neighbor agents, where neighbors are within neighborDist and
-        # are within the agent's field of view
-        neighborDistList = []
+        # Return a list of neighbor agents, where neighbors are within visionDistance
+        visibleList = []
         for agent in agentList:
             dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
             # if dist < neighborDist and self.canSee(agent):
-            if dist < neighborDist:
-                neighborDistList.append([agent, dist])
-            neighborDistList = sorted(neighborDistList, key=lambda neighbor: neighbor[1]) # Sort by distance
+            if dist < visionDistance:
+                visibleList.append([agent, dist])
+            visibleList = sorted(visibleList, key=lambda neighbor: neighbor[1]) # Sort by distance
 
         # Only return top n closest neighbors, where n is a set number of interaction partners
-        return [neighbor for neighbor, dist in neighborDistList][:numInteractionPartners]
+        return [neighbor for neighbor, dist in visibleList][:numInteractionPartners]
 
     def amTooClose(self, agent):
+        if agent.name == 'antagonist':
+            minimumDistance = minAntagonistDistance
+        else:
+            minimumDistance = minNeighborDistance
         dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
-        return (dist < minDist)
+        return (dist < minimumDistance)
 
     def turnInOppositeDirection(self, mag, agentPosX, agentPosY):
         # Apply steering in opposite direction of agent
@@ -142,20 +161,20 @@ class Agent:
 
     def flockingLogic(self, agents):
         # Avoid walls
-        if self.posY < minDist:
+        if self.posY < minWallDistance:
             # Steer away from top wall
             # print "%s steering away from top wall" % self.name
             self.turnInOppositeDirection(wallSepForce, self.posX, 0)
-        elif self.posY > maxY - minDist:
+        elif self.posY > maxY - minWallDistance:
             # Steer away from bottom wall
             # print "%s steering away from bottom wall" % self.name
             self.turnInOppositeDirection(wallSepForce, self.posX, maxY) 
 
-        if self.posX < minDist:
+        if self.posX < minWallDistance:
             # Steer away from left wall
             # print "%s steering away from left wall" % self.name
             self.turnInOppositeDirection(wallSepForce, 0, self.posY)
-        elif self.posX > maxX - minDist:
+        elif self.posX > maxX - minWallDistance:
             # Steer away from right wall
             # print "%s steering away from right wall" % self.name
             self.turnInOppositeDirection(wallSepForce, maxX, self.posY)
@@ -166,14 +185,17 @@ class Agent:
             # If there are no neighbors, we're done with flocking logic
             return
 
+        # Isolate neighbors of same color for special flocking dynamics
+        teamNeighbors = [neighbor for neighbor in neighbors if neighbor.color == self.color]
+
         # Avoid crowding neighbors
         for neighbor in neighbors:
             if self.amTooClose(neighbor):
                 # print '%s is too close to %s!' % (self.name, neighbor.name)
                 self.turnInOppositeDirection(sepForce, neighbor.posX, neighbor.posY)
 
-        # Steer towards average heading of neighbors
-        avgHeading = getAverageHeading(neighbors)
+        # Steer towards average heading of team neighbors
+        avgHeading = getAverageHeading(teamNeighbors)
 
         # Determine which is shorter: the angle it would take to turn left
         # and get to the average heading, or the angle it would take to do
@@ -202,10 +224,18 @@ class Agent:
         else:
             pass
 
-        # Steer towards average position of neighbors
-        avgPosX, avgPosY = getAveragePosition(neighbors)
+        # Steer towards average position of team neighbors
+        avgPosX, avgPosY = getAveragePosition(teamNeighbors)
 
         self.turnInSameDirection(cohesiveForce, avgPosX, avgPosY)
+
+        # Minor center attraction for effect
+        self.turnInSameDirection(centerAttraction, maxX / 2, maxY / 2)
+
+        # Occasionally, go a little off course (random disturbance)
+        # if random.uniform(0, 100) < 1.0:
+        #     self.heading = (self.heading + math.pi) % (2.0 * math.pi)
+
 
 
 def getAveragePosition(agents):
@@ -263,13 +293,25 @@ def main():
     spriteFactory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
     spriteRenderer = spriteFactory.create_sprite_render_system(window)
     
-    leader = Agent(500, 500, 2, 0, GREEN, 20, 20, spriteFactory, spriteRenderer, name='leader')
+    antagonist = Agent(500, 500, 4, 0, GREEN, 30, 30, spriteFactory, spriteRenderer, name='antagonist')
 
-    numFollowers = 30
+    numFollowers = 40
     followers = []
     for i in range(numFollowers):
-        follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), RED, 10, 10, spriteFactory, spriteRenderer)
+        follower = Agent(random.randint(200,800), random.randint(200,800), 0.5, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer)
         followers.append(follower)
+
+    # for i in range(numFollowers):
+    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer)
+    #     followers.append(follower)
+
+    # for i in range(numFollowers):
+    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), WHITE, 10, 10, spriteFactory, spriteRenderer)
+    #     followers.append(follower)
+
+    # for i in range(numFollowers):
+    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer)
+    #     followers.append(follower)
 
     # followerB = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer, name='Blue')
     # followerW = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), WHITE, 10, 10, spriteFactory, spriteRenderer, name='White')
@@ -280,9 +322,9 @@ def main():
 
     drawList = []
     drawList += [follower.sprite for follower in followers]
-    drawList.append(leader.sprite)
+    drawList.append(antagonist.sprite)
 
-    allAgents = followers + [leader]
+    allAgents = followers + [antagonist]
 
     running = True
     while running:
@@ -293,9 +335,9 @@ def main():
                 break
             if event.type == sdl2.SDL_KEYDOWN:
                 if event.key.keysym.sym == sdl2.SDLK_LEFT:
-                    leader.turnLeft(2)
+                    antagonist.turnLeft(2)
                 elif event.key.keysym.sym == sdl2.SDLK_RIGHT:
-                    leader.turnRight(2)
+                    antagonist.turnRight(2)
             # elif event.type == sdl2.SDL_KEYUP:
             #     if event.key.keysym.sym in (sdl2.SDLK_UP, sdl2.SDLK_RIGHT):
             #         leader.velocity.vy = 0
@@ -308,8 +350,11 @@ def main():
 
         for follower in followers:
             follower.updatePosition()
+            if follower.isTouching(antagonist) and not follower.invisible:
+                follower.becomeInvisible()
+                drawList.remove(follower.sprite)
             # followerW.turnLeft(0.1)
-        leader.updatePosition()
+        antagonist.updatePosition()
 
         sdl2.ext.fill(spriteRenderer.surface, sdl2.ext.Color(0, 0, 0))
         spriteRenderer.render(drawList)

@@ -19,20 +19,20 @@ neighborDist = 150
 minDist = 40
 leaderWeight = 10
 fov = math.pi / 2
-sepForce = 1.0
-wallSepForce = 1.0
-alignForce = 0.5
-cohesiveForce = 0.5
+sepForce = 0.1
+wallSepForce = 5
+alignForce = 0.9
+cohesiveForce = 0.9
 numInteractionPartners = 7 # neighbors to actually consider
+leaderAcc = 0.2
+maxSpeed = 4
 
 class Agent:
-    def __init__(self, posX, posY, speed, heading, color, width, height, spriteFactory, spriteRenderer, name = ''):
+    def __init__(self, posX, posY, velX, velY, color, width, height, spriteFactory, spriteRenderer, name = ''):
         self.posX = posX
         self.posY = posY
-        self.speed = speed
-        self.heading = heading
-        self.velX = self.speed * math.cos(self.heading)
-        self.velY = self.speed * math.sin(self.heading)
+        self.velX = velX
+        self.velY = velY
         self.color = color
         self.width = width
         self.height = height
@@ -41,18 +41,6 @@ class Agent:
         self.sprite.position = int(self.posX), int(self.posY)
         self.name = name
 
-    def turnLeft(self, mag):
-        # Change heading and velocity direction accordingly
-        self.heading -= mag * math.pi / 16.0
-        self.velX = self.speed * math.cos(self.heading)
-        self.velY = self.speed * math.sin(self.heading)
-
-    def turnRight(self, mag):
-        # Change heading and velocity direction accordingly
-        self.heading += mag * math.pi / 16.0
-        self.velX = self.speed * math.cos(self.heading)
-        self.velY = self.speed * math.sin(self.heading)
-
     def updatePosition(self):
         self.posX += self.velX
         self.posY += self.velY
@@ -60,7 +48,8 @@ class Agent:
         self.posX = min(maxX - 10, max(self.posX, 10))
         self.posY = min(maxY - 10, max(self.posY, 10))
 
-        self.heading = self.heading % (math.pi*2) # Mod 2pi
+        self.velX = min(maxSpeed, max(self.velX, -maxSpeed))
+        self.velY = min(maxSpeed, max(self.velY, -maxSpeed))
 
         self.sprite.position = int(self.posX), int(self.posY)
 
@@ -77,8 +66,12 @@ class Agent:
         agentHeading = math.atan2(vecY, vecX)
         agentHeading = agentHeading % (2.0 * math.pi)
 
+        myHeading = math.atan2(velY / velX)
+        myHeading = myHeading % (2.0 * math.pi)
+
         # Now, find the angle from our heading to that heading
-        angle = (self.heading - agentHeading) % 2 * math.pi
+        angle = (myHeading - agentHeading) % 2 * math.pi
+
         # If angle is within our FOV, then we can see the agent;
         # otherwise, we cannot
         if (angle < fov) or (2.0 * math.pi - angle < fov):
@@ -101,67 +94,34 @@ class Agent:
         # Only return top n closest neighbors, where n is a set number of interaction partners
         return [neighbor for neighbor, dist in neighborDistList][:numInteractionPartners]
 
+
     def amTooClose(self, agent):
         dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
         return (dist < minDist)
-
-    def turnInOppositeDirection(self, mag, agentPosX, agentPosY):
-        # Apply steering in opposite direction of agent
-        # (Hacky math)
-        Ax = self.posX
-        Ay = self.posY
-        Bx = self.posX + self.velX
-        By = self.posY + self.velY
-        determinantDiff = (Bx - Ax) * (agentPosY - Ay) - (By - Ay) * (agentPosX - Ax)
-        
-        if determinantDiff < 0: # If agent is on our left side, apply right turn
-            self.turnRight(mag)
-
-        else: # Otherwise it'll be either straight ahead or to the left, so turn left
-            self.turnLeft(mag)
-
-    def turnInSameDirection(self, mag, agentPosX, agentPosY):
-        # Apply steering in same direction as agent
-        # (Hacky math)
-        Ax = self.posX
-        Ay = self.posY
-        Bx = self.posX + self.velX
-        By = self.posY + self.velY
-        determinantDiff = (Bx - Ax) * (agentPosY - Ay) - (By - Ay) * (agentPosX - Ax)
-
-        if determinantDiff < 0: # If average is on our left side, apply left turn
-            # print "%s: steering left to match position" % self.name
-            self.turnLeft(mag)
-
-        elif determinantDiff > 0: # Otherwise if it's to the right, turn right
-            # print "%s: steering right to match position" % self.name
-            self.turnRight(mag)
-        else: # Otherwise it's straight ahead, so do nothing
-            pass
 
 
     def flockingLogic(self, agents):
         # Avoid walls
         if self.posY < minDist:
             # Steer away from top wall
-            # print "%s steering away from top wall" % self.name
-            self.turnInOppositeDirection(wallSepForce, self.posX, 0)
+            print "%s steering away from top wall" % self.name
+            self.velY += wallSepForce
         elif self.posY > maxY - minDist:
             # Steer away from bottom wall
-            # print "%s steering away from bottom wall" % self.name
-            self.turnInOppositeDirection(wallSepForce, self.posX, maxY) 
+            print "%s steering away from bottom wall" % self.name
+            self.velY -= wallSepForce
 
         if self.posX < minDist:
             # Steer away from left wall
-            # print "%s steering away from left wall" % self.name
-            self.turnInOppositeDirection(wallSepForce, 0, self.posY)
+            print "%s steering away from left wall" % self.name
+            self.velX += wallSepForce
         elif self.posX > maxX - minDist:
             # Steer away from right wall
-            # print "%s steering away from right wall" % self.name
-            self.turnInOppositeDirection(wallSepForce, maxX, self.posY)
-
+            print "%s steering away from right wall" % self.name
+            self.velX -= wallSepForce
 
         neighbors = self.getNeighbors(agents)
+
         if len(neighbors) == 0:
             # If there are no neighbors, we're done with flocking logic
             return
@@ -170,42 +130,48 @@ class Agent:
         for neighbor in neighbors:
             if self.amTooClose(neighbor):
                 # print '%s is too close to %s!' % (self.name, neighbor.name)
-                self.turnInOppositeDirection(sepForce, neighbor.posX, neighbor.posY)
 
-        # Steer towards average heading of neighbors
-        avgHeading = getAverageHeading(neighbors)
+                # Get unit vector components for the direction from the neighbor to the current agent
+                oppositeDirX = (neighbor.posX - self.posX)
+                oppositeDirY = (neighbor.posY - self.posY)
+                if oppositeDirX != 0:
+                    normedOppositeDirX = oppositeDirX / math.sqrt(oppositeDirX**2 + oppositeDirY**2)
+                else:
+                    normedOppositeDirX = 0
+                if oppositeDirY != 0:
+                    normedOppositeDirY = oppositeDirY / math.sqrt(oppositeDirX**2 + oppositeDirY**2)
+                else:
+                    normedOppositeDirY = 0
 
-        # Determine which is shorter: the angle it would take to turn left
-        # and get to the average heading, or the angle it would take to do
-        # the same thing turning right
-        if avgHeading < self.heading:
-            angleRight = avgHeading + math.pi * 2 - self.heading
+                self.velX += sepForce * normedOppositeDirX
+                self.velY += sepForce * normedOppositeDirY
+
+        # Match velocity of neighbors
+        avgVelX, avgVelY = getAverageVelocity(neighbors)
+
+        # Approach average velocity
+        if self.velX > avgVelX:
+            self.velX -= alignForce * avgVelX
         else:
-            angleRight = avgHeading - self.heading
+            self.velX += alignForce * avgVelX
 
-        if avgHeading > self.heading:
-            angleLeft = self.heading + math.pi * 2 - avgHeading
+        if self.velY > avgVelY:
+            self.velY -= alignForce * avgVelY
         else:
-            angleLeft = self.heading - avgHeading
+            self.velY += alignForce * avgVelY
 
-        if angleLeft < angleRight:
-            self.turnLeft(alignForce)
-            # print "%s: steering left to match heading" % self.name
-        elif angleLeft > angleRight:
-            # print "%s: steering right to match heading" % self.name
-            # print "avgHeading", avgHeading
-            # print "self.heading", self.heading
-            # print "angleLeft", angleLeft
-            # print "angleRight", angleRight
-            # print "========="
-            self.turnRight(alignForce)
-        else:
-            pass
-
-        # Steer towards average position of neighbors
+        # Move towards average position of neighbors
         avgPosX, avgPosY = getAveragePosition(neighbors)
 
-        self.turnInSameDirection(cohesiveForce, avgPosX, avgPosY)
+        if self.posX > avgPosX:
+            self.velX -= cohesiveForce * avgVelX
+        else:
+            self.velX += cohesiveForce * avgVelX
+
+        if self.posY > avgPosY:
+            self.velY -= cohesiveForce * avgVelY
+        else:
+            self.velY += cohesiveForce * avgVelY      
 
 
 def getAveragePosition(agents):
@@ -228,29 +194,26 @@ def getAveragePosition(agents):
 
     return avgPosX, avgPosY
 
-def getAverageHeading(agents):
+def getAverageVelocity(agents):
 
-    xCompSum = 0
-    yCompSum = 0
+    velXSum = 0
+    velYSum = 0
     for agent in agents:
         if agent.name == 'leader':
-            # print "getting leader's heading!"
-            # print "(it's %s)" % (agent.heading)
-            xCompSum += math.cos(agent.heading) * leaderWeight
-            yCompSum += math.sin(agent.heading) * leaderWeight
+            # print "is getting leader's velition!"
+            # print "(it's %s, %s)" % (agent.posX, agent.posY)
+            velXSum += agent.velX * leaderWeight
+            velYSum += agent.velY * leaderWeight
         else:
-            xCompSum += math.cos(agent.heading)
-            yCompSum += math.sin(agent.heading)
+            velXSum += agent.velX
+            velYSum += agent.velY
 
-    avgXCompSum = xCompSum / (len(agents) + leaderWeight - 1)
-    avgYCompSum = yCompSum / (len(agents) + leaderWeight - 1)
+    avgVelX = velXSum / (len(agents) + leaderWeight - 1)
+    avgVelY = velYSum / (len(agents) + leaderWeight - 1)
 
-    avgHeading = math.atan2(avgYCompSum, avgXCompSum)
+    # print "calculated average position of %s, %s" % (avgPosX, avgPosY)
 
-    avgHeading = avgHeading % (2.0 * math.pi)
-    # print "calculated average heading of %s" % (avgHeading)
-
-    return avgHeading
+    return avgVelX, avgVelY
 
 def main():
     RESOURCES = sdl2.ext.Resources(__file__, "resources")
@@ -267,15 +230,15 @@ def main():
 
     numFollowers = 30
     followers = []
-    for i in range(numFollowers):
-        follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), RED, 10, 10, spriteFactory, spriteRenderer)
-        followers.append(follower)
+    # for i in range(numFollowers):
+    #     follower = Agent(random.randint(200,800), random.randint(200,800), random.uniform(0,2), random.uniform(0,2), RED, 10, 10, spriteFactory, spriteRenderer)
+    #     followers.append(follower)
 
-    # followerB = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer, name='Blue')
-    # followerW = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), WHITE, 10, 10, spriteFactory, spriteRenderer, name='White')
-    # followerP = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer, name='Purple')
+    followerB = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer, name='Blue')
+    followerW = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), WHITE, 10, 10, spriteFactory, spriteRenderer, name='White')
+    followerP = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer, name='Purple')
 
-    # followers += [followerB, followerW, followerP]
+    followers += [followerB, followerW, followerP]
     # followers += [followerB]
 
     drawList = []
@@ -293,9 +256,13 @@ def main():
                 break
             if event.type == sdl2.SDL_KEYDOWN:
                 if event.key.keysym.sym == sdl2.SDLK_LEFT:
-                    leader.turnLeft(2)
+                    leader.velX -= leaderAcc
                 elif event.key.keysym.sym == sdl2.SDLK_RIGHT:
-                    leader.turnRight(2)
+                    leader.velX += leaderAcc
+                elif event.key.keysym.sym == sdl2.SDLK_UP:
+                    leader.velY -= leaderAcc
+                elif event.key.keysym.sym == sdl2.SDLK_DOWN:
+                    leader.velY += leaderAcc
             # elif event.type == sdl2.SDL_KEYUP:
             #     if event.key.keysym.sym in (sdl2.SDLK_UP, sdl2.SDLK_RIGHT):
             #         leader.velocity.vy = 0

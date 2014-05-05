@@ -1,6 +1,6 @@
 # Summary
 
-This is a simple demo of the "boids" flocking algorithm, as developed by Craig Reynolds. This project requires the Python SDL2 library to be installed.
+This is a simple demo of the ["boids" flocking algorithm](http://www.red3d.com/cwr/boids/), as developed by Craig Reynolds. This project requires the Python SDL2 library to be installed.
 
 # Credits
 

@@ -16,7 +16,7 @@ PURPLE = sdl2.ext.Color(255, 0, 255)
 maxX = 1024
 maxY = 800
 visionDistance = 150
-minNeighborDistance = 40
+minNeighborDistance = 20
 minAntagonistDistance = 150
 minWallDistance = 40
 leaderWeight = 10
@@ -28,8 +28,63 @@ cohesiveForce = 0.5
 numInteractionPartners = 14 # neighbors to actually consider
 centerAttraction = 0.5
 
+# Draws all of the agents, with their headings, onto the given surface
+def drawAgents(agents, surface):
+    pixelview = sdl2.ext.PixelView(surface)
+    for agent in agents:
+        # print "Agent at %s, %s" % (agent.posX, agent.posY)
+        # Draw triangle
+        #pixelview[int(agent.posY)][int(agent.posX)] = WHITE
+        normedVelX = agent.velX / agent.speed;
+        normedVelY = agent.velY / agent.speed;
+        line(int(agent.posX), int(agent.posY), int(agent.posX + normedVelX * agent.width), int(agent.posY + normedVelY * agent.width), agent.color, pixelview)
+    del pixelview
+
+
+# Borrowed from https://gist.github.com/arti95/6264890
+def line(x0, y0, x1, y1, color, pixelview):
+    #print "x0:{} y0:{} x1:{} y1:{}".format(x0, y0, x1, y1)
+    """draw a line 
+    
+    http://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm"""
+    #sdl2ext.fill(winsurf, BLACK)
+    #pixelview[event.motion.y][event.motion.x] = WHITE
+    
+    # dont draw put of screen
+    # this check should be in "while true" loop but for some reason it 
+    # didn't work there
+    x0 = 0 if x0 < 0 else x0
+    x0 = maxX -1 if x0 >= maxX else x0
+    x1 = 0 if x1 < 0 else x1
+    x1 = maxX -1 if x1 >= maxX else x1
+    y0 = 0 if y0 < 0 else y0
+    y0 = maxY -1 if y0 >= maxY else y0
+    y1 = 0 if y1 < 0 else y1
+    y1 = maxY -1 if y1 >= maxY else y1
+    
+    
+    dx = abs(x1-x0)
+    dy = abs(y1-y0) 
+    sx = 1 if (x0 < x1) else -1
+    sy = 1 if (y0 < y1) else -1
+    err = dx-dy
+ 
+    while True:
+        pixelview[y0][x0] = color
+        if x0 == x1 and y0 == y1: break
+        e2 = 2*err
+        if e2 > -dy:
+           err = err - dy
+           x0  = x0 + sx
+        if x0 == x1 and y0 == y1: 
+            pixelview[y0][x0] = color
+            break
+        if e2 < dx: 
+            err = err + dx
+            y0  =y0 + sy 
+
 class Agent:
-    def __init__(self, posX, posY, speed, heading, color, width, height, spriteFactory, spriteRenderer, name = ''):
+    def __init__(self, posX, posY, speed, heading, color, width, height, name = ''):
         self.posX = posX
         self.posY = posY
         self.speed = speed
@@ -39,9 +94,9 @@ class Agent:
         self.color = color
         self.width = width
         self.height = height
-        self.sprite = spriteFactory.from_color(self.color, size=(self.width, self.height))
-        self.spriteRenderer = spriteRenderer
-        self.sprite.position = int(self.posX - self.width/2), int(self.posY - self.height/2)
+        # self.sprite = spriteFactory.from_color(self.color, size=(self.width, self.height))
+        # self.spriteRenderer = spriteRenderer
+        # self.sprite.position = int(self.posX - self.width/2), int(self.posY - self.height/2)
         self.name = name
         self.invisible = False
 
@@ -66,7 +121,7 @@ class Agent:
 
         self.heading = self.heading % (math.pi*2) # Mod 2pi
 
-        self.sprite.position = int(self.posX), int(self.posY)
+        # self.sprite.position = int(self.posX - self.width/2), int(self.posY - self.height/2)
 
     def draw(self):
         if not self.invisible:
@@ -78,6 +133,7 @@ class Agent:
 
     def isTouching(self, agent):
         dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
+        # print dist
         if dist < self.width / 2 + agent.width / 2:
             return True
         else:
@@ -289,28 +345,30 @@ def main():
 
     window = sdl2.ext.Window("Flocking Demo", size=(maxX, maxY))
     window.show()
+    winsurf = window.get_surface()
 
-    spriteFactory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
-    spriteRenderer = spriteFactory.create_sprite_render_system(window)
+    # spriteFactory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
+    # spriteRenderer = spriteFactory.create_sprite_render_system(window)
     
-    antagonist = Agent(500, 500, 4, 0, GREEN, 30, 30, spriteFactory, spriteRenderer, name='antagonist')
+    antagonist = Agent(500, 500, 3, 0, GREEN, 30, 30, name='antagonist')
 
     numFollowers = 40
     followers = []
+
     for i in range(numFollowers):
-        follower = Agent(random.randint(200,800), random.randint(200,800), 0.5, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer)
+        follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), 2.1, random.uniform(0,2*math.pi), PURPLE, 10, 10)
         followers.append(follower)
 
     # for i in range(numFollowers):
-    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer)
+    #     follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), 2.1, random.uniform(0,2*math.pi), BLUE, 10, 10)
     #     followers.append(follower)
 
     # for i in range(numFollowers):
-    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), WHITE, 10, 10, spriteFactory, spriteRenderer)
+    #     follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), 2.1, random.uniform(0,2*math.pi), RED, 10, 10)
     #     followers.append(follower)
 
     # for i in range(numFollowers):
-    #     follower = Agent(random.randint(200,800), random.randint(200,800), 2.1, random.uniform(0,2*math.pi), PURPLE, 10, 10, spriteFactory, spriteRenderer)
+    #     follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), 2.1, random.uniform(0,2*math.pi), WHITE, 10, 10)
     #     followers.append(follower)
 
     # followerB = Agent(random.randint(200,800), random.randint(200,800), 2, random.uniform(0,2*math.pi), BLUE, 10, 10, spriteFactory, spriteRenderer, name='Blue')
@@ -320,9 +378,9 @@ def main():
     # followers += [followerB, followerW, followerP]
     # followers += [followerB]
 
-    drawList = []
-    drawList += [follower.sprite for follower in followers]
-    drawList.append(antagonist.sprite)
+    # drawList = []
+    # drawList += followers
+    # drawList.append(antagonist)
 
     allAgents = followers + [antagonist]
 
@@ -350,14 +408,20 @@ def main():
 
         for follower in followers:
             follower.updatePosition()
-            if follower.isTouching(antagonist) and not follower.invisible:
-                follower.becomeInvisible()
-                drawList.remove(follower.sprite)
+            # if follower.isTouching(antagonist) and not follower.invisible:
+            #     follower.becomeInvisible()
+                # drawList.remove(follower.sprite)
             # followerW.turnLeft(0.1)
         antagonist.updatePosition()
 
-        sdl2.ext.fill(spriteRenderer.surface, sdl2.ext.Color(0, 0, 0))
-        spriteRenderer.render(drawList)
+        sdl2.ext.fill(winsurf, sdl2.ext.Color(0, 0, 0))
+        drawAgents(followers + [antagonist], winsurf)
+
+        window.refresh()
+
+
+        # spriteRenderer.render(drawList)
+
 
     sdl2.ext.quit()
 

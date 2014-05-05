@@ -12,7 +12,6 @@ RED = sdl2.ext.Color(255, 0, 0)
 BLUE = sdl2.ext.Color(0, 0, 255)
 PURPLE = sdl2.ext.Color(255, 0, 255)
 
-
 maxX = 1024
 maxY = 800
 visionDistance = 150
@@ -27,6 +26,9 @@ alignForce = 0.5
 cohesiveForce = 0.5
 numInteractionPartners = 14 # neighbors to actually consider
 centerAttraction = 0.5
+
+sparrowSpeed = 2.5
+falconSpeed = 5
 
 # Draws all of the agents, with their headings, onto the given surface
 def drawAgents(agents, surface):
@@ -350,13 +352,13 @@ def main():
     # spriteFactory = sdl2.ext.SpriteFactory(sdl2.ext.SOFTWARE)
     # spriteRenderer = spriteFactory.create_sprite_render_system(window)
     
-    antagonist = Agent(500, 500, 3, 0, GREEN, 30, 30, name='antagonist')
+    antagonist = Agent(500, 500, falconSpeed, 0, GREEN, 30, 30, name='antagonist')
 
     numFollowers = 40
     followers = []
 
     for i in range(numFollowers):
-        follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), 2.1, random.uniform(0,2*math.pi), PURPLE, 10, 10)
+        follower = Agent(random.randint(200,maxX - 200), random.randint(200,maxY - 200), sparrowSpeed, random.uniform(0,2*math.pi), PURPLE, 10, 10)
         followers.append(follower)
 
     # for i in range(numFollowers):

@@ -24,7 +24,7 @@ centerAttraction = 0.05
 fov = 2.0 * math.pi
 
 sparrowSpeed = 2.5
-falconSpeed = 5
+falconSpeed = 8
 turnSpeed = math.pi / 16
 
 numSparrows = 60

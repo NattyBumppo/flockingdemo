@@ -17,24 +17,25 @@ RED = sdl2.ext.Color(255, 0, 0)
 BLUE = sdl2.ext.Color(0, 0, 255)
 PURPLE = sdl2.ext.Color(255, 0, 255)
 
-numFollowers = 30
+numFollowers = 60
 
 maxX = 1024
 maxY = 800
-visionDistance = 300
+visionDistance = 500
 minNeighborDistance = 20
-minAntagonistDistance = 200
+minAntagonistDistance = 500
 minWallDistance = 40
 leaderWeight = 10
-fov = math.pi / 2
-sepForce = 2.0
+fov = 5 * math.pi / 4
+peerSepForce = 2.0
+antagonistSepForce = 3.0
 wallSepForce = 4
 alignForce = 0.5
 cohesiveForce = 0.5
-numInteractionPartners = 10 # neighbors to actually consider
+numInteractionPartners = 4 # neighbors to actually consider
 centerAttraction = 0.5
 
-sparrowSpeed = 2.5
+sparrowSpeed = 3
 falconSpeed = 5
 
 # Draws all of the agents, with their headings, onto the given surface
@@ -241,7 +242,10 @@ class Agent:
         for neighbor in neighbors:
             if self.amTooClose(neighbor):
                 # print '%s is too close to %s!' % (self.name, neighbor.name)
-                self.turnInOppositeDirection(sepForce, neighbor.posX, neighbor.posY)
+                if neighbor.name == 'antagonist':
+                    self.turnInOppositeDirection(antagonistSepForce, neighbor.posX, neighbor.posY)
+                else:
+                    self.turnInOppositeDirection(peerSepForce, neighbor.posX, neighbor.posY)
 
         # Steer towards average heading of team neighbors
         avgHeading = getAverageHeading(teamNeighbors)
@@ -311,7 +315,7 @@ def getAverageHeading(agents):
     return avgHeading
 
 def main():
-    RESOURCES = sdl2.ext.Resources(__file__, "resources")
+    # RESOURCES = sdl2.ext.Resources(__file__, "resources")
 
     sdl2.ext.init()
 
@@ -319,7 +323,7 @@ def main():
     window.show()
     winsurf = window.get_surface()
 
-    antagonist = Agent(500, 500, falconSpeed, 0, GREEN, 30, 30, name='antagonist')
+    antagonist = Agent(maxX, maxY, falconSpeed, 0, GREEN, 30, 30, name='antagonist')
 
     followers = []
 
@@ -337,9 +341,9 @@ def main():
                 running = False
                 break
             if event.type == sdl2.SDL_KEYDOWN:
-                if event.key.keysym.sym == sdl2.SDLK_LEFT:
+                if (event.key.keysym.sym == sdl2.SDLK_LEFT) or (event.key.keysym.sym == sdl2.SDLK_a):
                     antagonist.turnLeft(2)
-                elif event.key.keysym.sym == sdl2.SDLK_RIGHT:
+                elif (event.key.keysym.sym == sdl2.SDLK_RIGHT) or (event.key.keysym.sym == sdl2.SDLK_d):
                     antagonist.turnRight(2)
 
         sdl2.SDL_Delay(10)

@@ -23,7 +23,7 @@ maxX = 1024
 maxY = 800
 visionDistance = 500
 minNeighborDistance = 20
-minAntagonistDistance = 500
+minAntagonistDistance = 100
 minWallDistance = 40
 leaderWeight = 10
 fov = 5 * math.pi / 4
@@ -31,7 +31,7 @@ peerSepForce = 2.0
 antagonistSepForce = 3.0
 wallSepForce = 4
 alignForce = 0.5
-cohesiveForce = 0.5
+cohesiveForce = 0.4
 numInteractionPartners = 4 # neighbors to actually consider
 centerAttraction = 0.5
 
@@ -163,15 +163,26 @@ class Agent:
     def getNeighbors(self, agentList):
         # Return a list of neighbor agents, where neighbors are within visionDistance
         visibleList = []
+        antagonist_seen = False
+        antagonist_unit = None
         for agent in agentList:
+
             dist = math.sqrt((self.posX - agent.posX)**2 + (self.posY - agent.posY)**2)
             # if dist < neighborDist and self.canSee(agent):
             if dist < visionDistance:
-                visibleList.append([agent, dist])
+                if agent.name == 'antagonist':
+                    antagonist_seen = True
+                    antagonist_unit = agent
+                else:
+                    visibleList.append([agent, dist])
             visibleList = sorted(visibleList, key=lambda neighbor: neighbor[1]) # Sort by distance
 
         # Only return top n closest neighbors, where n is a set number of interaction partners
-        return [neighbor for neighbor, dist in visibleList][:numInteractionPartners]
+        # (however, include the antagonist if they were seen, as well)
+        if antagonist_seen:
+            return [antagonist_unit] + [neighbor for neighbor, dist in visibleList][:numInteractionPartners]
+        else:
+            return [neighbor for neighbor, dist in visibleList][:numInteractionPartners]
 
     def amTooClose(self, agent):
         if agent.name == 'antagonist':
@@ -238,7 +249,7 @@ class Agent:
         # Isolate neighbors of same color for special flocking dynamics
         teamNeighbors = [neighbor for neighbor in neighbors if neighbor.color == self.color]
 
-        # Avoid crowding neighbors
+        # Avoid crowding neighbors (separation force)
         for neighbor in neighbors:
             if self.amTooClose(neighbor):
                 # print '%s is too close to %s!' % (self.name, neighbor.name)
@@ -247,7 +258,7 @@ class Agent:
                 else:
                     self.turnInOppositeDirection(peerSepForce, neighbor.posX, neighbor.posY)
 
-        # Steer towards average heading of team neighbors
+        # Steer towards average heading of team neighbors (alignment force)
         avgHeading = getAverageHeading(teamNeighbors)
 
         # Determine which is shorter: the angle it would take to turn left
@@ -269,7 +280,7 @@ class Agent:
         else:
             pass
 
-        # Steer towards average position of team neighbors
+        # Steer towards average position of team neighbors (cohesion force)
         avgPosX, avgPosY = getAveragePosition(teamNeighbors)
 
         self.turnInSameDirection(cohesiveForce, avgPosX, avgPosY)
@@ -345,6 +356,9 @@ def main():
                     antagonist.turnLeft(2)
                 elif (event.key.keysym.sym == sdl2.SDLK_RIGHT) or (event.key.keysym.sym == sdl2.SDLK_d):
                     antagonist.turnRight(2)
+                elif (event.key.keysym.sym == sdl2.SDLK_q):
+                    running = False
+                    break
 
         sdl2.SDL_Delay(10)
 
